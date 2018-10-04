@@ -3,13 +3,7 @@
 
 def initialize()
   @reg_path = '/sys/kernel/debug/regmap/sunxi-rsb-3a3/registers'
-
-  # Set battery capacity to 1450mAh.
-  set_bit(0xe0) {|b| b & 0b00000000 }
-  set_bit(0xe1) {|b| b & 0b00000000 }
-  set_bit(0xe0) {|b| b | 0b10000011 }
-  set_bit(0xe1) {|b| b | 0b11101000 }
-
+  
   # Disable the Charger temperature loop enable.
   set_bit(0x35) {|b| b & 0b11110111 }
 
@@ -87,16 +81,16 @@ thread = Thread.new do
 end
 
 
-# Bring it down to 70% state of charge.
-printf("Wait for capacity to decrease to 70 percent\n")
+# Bring it down to 65% state of charge.
+printf("Wait for capacity to decrease to 65 percent\n")
 count = 0
 loop do
   # Read capacity
   capacity_now = `cat /sys/devices/platform/soc/1f03400.rsb/sunxi-rsb-3a3/axp20x-battery-power-supply/power_supply/axp20x-battery/capacity`.strip.to_i
   printf("Current SoC: %d \n", capacity_now)
   
-  # Wait until capacity is less than 71%
-  if capacity_now < 71
+  # Wait until capacity is less than 66%
+  if capacity_now < 66
     break
   else
     sleep 10
@@ -111,6 +105,7 @@ sleep 300
 # Configure the charging and measurement process
 printf("Start RDC measurement\n")
 configure_rdc_measurement
+sleep 2
 enable_charging_at_600mA
 
 # Wait for rdc to compute
