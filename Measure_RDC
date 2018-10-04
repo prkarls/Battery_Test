@@ -56,38 +56,43 @@ def enable_charging_at_600mA
 end
 
 def configure_rdc_measurement
-  # Set Bit 7 of Register 0x30 to 0 (Enable VBUS Power Path).
+  # Configure measurement with 60s timers
   set_bit(0xe9) {|b| b & 0b00000000 }
   set_bit(0xe9) {|b| b | 0b00100100 }
 
-  # Set VBUS current to 900mA.
+  # Set minimum measurement current to 150mA
   set_bit(0xeb) {|b| b & 0b00000000 }
   set_bit(0xeb) {|b| b | 0b00001000 }
 
-  # Set MAX charge current to 600mA.
-  set_bit(0xeb) {|b| b & 0b00000000 }
-  set_bit(0xeb) {|b| b | 0b00100000 }
+  # Enable recalculation
+  set_bit(0xec) {|b| b & 0b00000000 }
+  set_bit(0xec) {|b| b | 0b00100000 }
+end
+
+def disable_vbus
+  # Set Bit 7 of Register 0x30 to 1 (Disable VBUS Power Path).
+  set_bit(0x30) {|b| b | 0b10000000 }
 end
 
 
-printf("initialize")
+printf("initialize\n")
 initialize
 
 
 # Assume state of charge is greater than 71% for now and begin to bring the state of charge down using stress.
-printf("Start stress")
+printf("Start stress\n")
 thread = Thread.new do
     `nohup ./stress -c 7 2>&1 > /dev/null < /dev/null &`
 end
 
 
 # Bring it down to 70% state of charge.
-printf("Wait for capacity to decrease to 70%")
+printf("Wait for capacity to decrease to 70 percent\n")
 count = 0
 loop do
   # Read capacity
   capacity_now = `cat /sys/devices/platform/soc/1f03400.rsb/sunxi-rsb-3a3/axp20x-battery-power-supply/power_supply/axp20x-battery/capacity`.strip.to_i
-  printf("Current SoC: #{capacity_now}")
+  printf("Current SoC: %d \n", capacity_now)
   
   # Wait until capacity is less than 71%
   if capacity_now < 71
@@ -98,12 +103,12 @@ loop do
 end
 
 # Disable stress and wait 5 minutes.
-printf("Kill stress and wait 5 minutes")
+printf("Kill stress and wait 5 minutes\n")
 `killall stress`
 sleep 300
 
 # Configure the charging and measurement process
-printf("Start RDC measurement")
+printf("Start RDC measurement\n")
 configure_rdc_measurement
 enable_charging_at_600mA
 
@@ -119,7 +124,7 @@ loop do
 end
 
 
-printf("Done")
+printf("Done\n")
 
 
 
