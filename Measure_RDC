@@ -1,4 +1,120 @@
 #!/usr/bin/env ruby
 
 
- 
+def initialize()
+  @reg_path = '/sys/kernel/debug/regmap/sunxi-rsb-3a3/registers'
+
+  # Set battery capacity to 1450mAh.
+  set_bit(0xe0) {|b| b & 0b00000000 }
+  set_bit(0xe1) {|b| b & 0b00000000 }
+  set_bit(0xe0) {|b| b | 0b10000011 }
+  set_bit(0xe1) {|b| b | 0b11101000 }
+
+  # Disable the Charger temperature loop enable.
+  set_bit(0x35) {|b| b & 0b11110111 }
+
+  # Disable all battery temperature interrupts.
+  set_bit(0x42) {|b| b & 0b00000000 }
+
+end
+
+def registers
+  regs = File.read(@reg_path)
+
+  reg_vals = {}
+  regs.split("\n").each do |line|
+    key, value = line.strip.split(': ')
+
+    # Map hex values to Fixnums
+    reg_vals[key.to_i(16)] = value.to_i(16)
+  end
+
+  reg_vals
+end
+
+def set_bit(register)
+  old_val = registers[register]
+  new_val = yield(old_val)
+  cmd = "echo #{('%02X' % register).downcase} #{('%02X' % new_val).downcase} > #{@reg_path}"
+  `#{cmd}`
+end
+
+def enable_charging_at_600mA
+  # Set Bit 7 of Register 0x30 to 0 (Enable VBUS Power Path).
+  set_bit(0x30) {|b| b & 0b01111111 }
+
+  # Sleep to allow the BC Detection circuit to complete.
+  sleep 3
+
+  # Set VBUS current to 900mA.
+  set_bit(0x35) {|b| b & 0b00001111 }
+  set_bit(0x35) {|b| b | 0b00100000 }
+
+  # Set MAX charge current to 600mA.
+  set_bit(0x33) {|b| b & 0b11110000 }
+  set_bit(0x33) {|b| b | 0b00000010 }
+end
+
+def configure_rdc_measurement
+  # Set Bit 7 of Register 0x30 to 0 (Enable VBUS Power Path).
+  set_bit(0xe9) {|b| b & 0b00000000 }
+  set_bit(0xe9) {|b| b | 0b00100100 }
+
+  # Set VBUS current to 900mA.
+  set_bit(0xeb) {|b| b & 0b00000000 }
+  set_bit(0xeb) {|b| b | 0b00001000 }
+
+  # Set MAX charge current to 600mA.
+  set_bit(0xeb) {|b| b & 0b00000000 }
+  set_bit(0xeb) {|b| b | 0b00100000 }
+end
+
+
+
+initialize
+
+
+# Assume state of charge is greater than 71% for now and begin to bring the state of charge down using stress.
+thread = Thread.new do
+    `nohup ./stress -c 7 2>&1 > /dev/null < /dev/null &`
+end
+
+
+# Bring it down to 70% state of charge.
+count = 0
+loop do
+  # Read capacity
+  capacity_now = `cat /sys/devices/platform/soc/1f03400.rsb/sunxi-rsb-3a3/axp20x-battery-power-supply/power_supply/axp20x-battery/capacity`.strip.to_i
+
+  # Wait until capacity is less than 71%
+  if capacity_now < 71
+    break
+  else
+    sleep 10
+  end
+end
+
+# Disable stress and wait 5 minutes.
+`killall stress`
+sleep 300
+
+# Configure the charging and measurement process
+configure_rdc_measurement
+enable_charging_at_600mA
+
+# Wait for rdc to compute
+count = 0
+loop do
+  # Read capacity
+  if ((registers[0xba] & 0b00100000) != 0)
+    break
+  else
+    sleep 10
+  end
+end
+
+
+printf("Done")
+
+
+
