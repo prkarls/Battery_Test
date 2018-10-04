@@ -70,22 +70,25 @@ def configure_rdc_measurement
 end
 
 
-
+printf("initialize")
 initialize
 
 
 # Assume state of charge is greater than 71% for now and begin to bring the state of charge down using stress.
+printf("Start stress")
 thread = Thread.new do
     `nohup ./stress -c 7 2>&1 > /dev/null < /dev/null &`
 end
 
 
 # Bring it down to 70% state of charge.
+printf("Wait for capacity to decrease to 70%")
 count = 0
 loop do
   # Read capacity
   capacity_now = `cat /sys/devices/platform/soc/1f03400.rsb/sunxi-rsb-3a3/axp20x-battery-power-supply/power_supply/axp20x-battery/capacity`.strip.to_i
-
+  printf("Current SoC: #{capacity_now}")
+  
   # Wait until capacity is less than 71%
   if capacity_now < 71
     break
@@ -95,10 +98,12 @@ loop do
 end
 
 # Disable stress and wait 5 minutes.
+printf("Kill stress and wait 5 minutes")
 `killall stress`
 sleep 300
 
 # Configure the charging and measurement process
+printf("Start RDC measurement")
 configure_rdc_measurement
 enable_charging_at_600mA
 
