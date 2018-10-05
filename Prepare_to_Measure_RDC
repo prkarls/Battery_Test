@@ -1,14 +1,14 @@
 #!/usr/bin/env ruby
 
+# This scrip runs stress on the unit until the state of charge is 65%. 
+# It then configures the unit to perform battery internal impedance measurements at every power before shutting down
+# You must manually turn the unit on, connect it to a charger, and monitor 818 registers BA and BB for the measurement/
+# calculation to be complete.
 
 def initialize()
   @reg_path = '/sys/kernel/debug/regmap/sunxi-rsb-3a3/registers'
   
-  # Disable the Charger temperature loop enable.
-  set_bit(0x35) {|b| b & 0b11110111 }
-
-  # Disable all battery temperature interrupts.
-  set_bit(0x42) {|b| b & 0b00000000 }
+  # Any specific first steps here
 
 end
 
@@ -69,30 +69,33 @@ def disable_vbus
 end
 
 # Kill any tasks here:
-`systemctl kill `
+#`systemctl kill ____`
 
 # Initialze
 printf("Initialize\n")
 initialize
+sleep 1
 
 # Disable VBUS to force the unit to run on battery power.
 disable_vbus
+sleep 1
 
-# Assume state of charge is greater than 71% for now and begin to bring the state of charge down using stress.
-printf("Start stress\n")
+# Assume state of charge is greater than 66%, begin to bring the state of charge down using stress.
+printf("Start stress on 8 cores.\n")
 thread = Thread.new do
     `nohup ./stress -c 8 2>&1 > /dev/null < /dev/null &`
 end
+sleep 1
 
-# Bring it down to 65% state of charge.
-printf("Wait for capacity to decrease to 65 percent\n")
+# Wawit for the state of charge to drop to 65%.
+printf("Wait for state of charge to decrease to 65 percent.\n")
 count = 0
 loop do
   # Read capacity
   soc_now = `cat /sys/devices/platform/soc/1f03400.rsb/sunxi-rsb-3a3/axp20x-battery-power-supply/power_supply/axp20x-battery/capacity`.strip.to_i
   printf("Current SoC: %d \n", soc_now)
   
-  # Wait until capacity is less than 66%
+  # Check the soc
   if soc_now < 66
     break
   else
@@ -101,19 +104,18 @@ loop do
 end
 
 # Disable stress and wait 5 minutes.
-printf("Kill stress and wait 5 minutes\n")
+printf("Kill stress and wait 5 minutes.\n")
 `killall stress`
 sleep 300
 
 # Configure the charging and measurement process
-printf("Configure the RDC measurement\n")
+printf("Configure the RDC measurement.\n")
 configure_rdc_measurement
 sleep 10
+enable_charging_at_600mA
+sleep 1
 
 # Shutdown
-printf("Done\n")
+printf("Done, shutting down.\n")
 `shutdown now`
-
-
-
 
