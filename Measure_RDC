@@ -68,29 +68,32 @@ def disable_vbus
   set_bit(0x30) {|b| b | 0b10000000 }
 end
 
+# Kill any tasks here:
+`systemctl kill `
 
+# Initialze
 printf("Initialize\n")
 initialize
-disable_vbus
 
+# Disable VBUS to force the unit to run on battery power.
+disable_vbus
 
 # Assume state of charge is greater than 71% for now and begin to bring the state of charge down using stress.
 printf("Start stress\n")
 thread = Thread.new do
-    `nohup ./stress -c 7 2>&1 > /dev/null < /dev/null &`
+    `nohup ./stress -c 8 2>&1 > /dev/null < /dev/null &`
 end
-
 
 # Bring it down to 65% state of charge.
 printf("Wait for capacity to decrease to 65 percent\n")
 count = 0
 loop do
   # Read capacity
-  capacity_now = `cat /sys/devices/platform/soc/1f03400.rsb/sunxi-rsb-3a3/axp20x-battery-power-supply/power_supply/axp20x-battery/capacity`.strip.to_i
-  printf("Current SoC: %d \n", capacity_now)
+  soc_now = `cat /sys/devices/platform/soc/1f03400.rsb/sunxi-rsb-3a3/axp20x-battery-power-supply/power_supply/axp20x-battery/capacity`.strip.to_i
+  printf("Current SoC: %d \n", soc_now)
   
   # Wait until capacity is less than 66%
-  if capacity_now < 66
+  if soc_now < 66
     break
   else
     sleep 10
@@ -103,24 +106,14 @@ printf("Kill stress and wait 5 minutes\n")
 sleep 300
 
 # Configure the charging and measurement process
-printf("Start RDC measurement\n")
+printf("Configure the RDC measurement\n")
 configure_rdc_measurement
-sleep 2
-enable_charging_at_600mA
+sleep 10
 
-# Wait for rdc to compute
-count = 0
-loop do
-  # Read capacity
-  if ((registers[0xba] & 0b00100000) != 0)
-    break
-  else
-    sleep 10
-  end
-end
-
-
+# Shutdown
 printf("Done\n")
+`shutdown now`
+
 
 
 
